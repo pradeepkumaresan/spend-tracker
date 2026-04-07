@@ -253,7 +253,7 @@ class SpendTypeConverters {
 @TypeConverters(SpendTypeConverters::class)
 @Database(
     entities = [Spend::class, Category::class, ModelFeedback::class, AppConfig::class, MlMetric::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

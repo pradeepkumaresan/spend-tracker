@@ -234,19 +234,20 @@ object SmsAmountParser {
     private val inrRegex = Regex("(?:INR|Rs\\.?|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
 
     fun parseAmount(body: String): Pair<String, Double>? {
-        val lower = body.lowercase(Locale.getDefault())
-
-        // 1. Try foreign currencies first — never appears in balance lines
+        // Rule 1: If a foreign (non-INR) currency is present anywhere in the body,
+        // ALWAYS use it. INR amounts in the same message are invariably the
+        // remaining balance or credit limit — never the transaction amount.
         for ((ccy, regex) in foreignPatterns) {
-            for (match in regex.findAll(body)) {
-                val amount = match.groupValues.getOrNull(1)?.replace(",", "")?.toDoubleOrNull() ?: continue
-                val ctx = contextAround(lower, match.range.first)
-                if (balanceContextWords.any { ctx.contains(it) }) continue
-                return ccy to amount
-            }
+            val match = regex.find(body) ?: continue
+            val amount = match.groupValues.getOrNull(1)?.replace(",", "")?.toDoubleOrNull() ?: continue
+            if (amount > 0.0) return ccy to amount
         }
 
-        // 2. Try INR near transaction keywords (debit/credit action amounts)
+        // Rule 2: Pure INR SMS — pick the INR amount closest to a transaction verb,
+        // excluding balance/limit amounts.
+        val lower = body.lowercase(Locale.getDefault())
+
+        // First pass: prefer amounts right next to a transaction verb
         for (match in inrRegex.findAll(body)) {
             val amount = match.groupValues.getOrNull(1)?.replace(",", "")?.toDoubleOrNull() ?: continue
             val ctx = contextAround(lower, match.range.first)
@@ -254,7 +255,7 @@ object SmsAmountParser {
             if (transactionContextWords.any { ctx.contains(it) }) return "INR" to amount
         }
 
-        // 3. Fall back to any non-balance INR amount
+        // Second pass: any non-balance INR amount
         for (match in inrRegex.findAll(body)) {
             val amount = match.groupValues.getOrNull(1)?.replace(",", "")?.toDoubleOrNull() ?: continue
             val ctx = contextAround(lower, match.range.first)
